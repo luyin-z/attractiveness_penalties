@@ -1,10 +1,9 @@
 # 0. Init ----------------------------------------------------------------------
-library(here); library(tidyverse); library(cowplot); library(fixest)
-library(flextable); library(modelsummary); library(ftExtra); library(caret)
-library(scales); library(lemon); library(lme4); library(marginaleffects)
-library(psych); library(lavaan); library(ggpubr); library(ggh4x)
-library(gtsummary); library(ggtern); library(colorjam)
-library(xgboost); library(survey); library(car)
+library(here); library(tidyverse)
+library(cowplot); library(ggtern); library(ggpubr); library(ggh4x)
+library(survey); library(fixest); library(marginaleffects); library(car)
+library(gtsummary); library(flextable); library(modelsummary); library(ftExtra)
+library(caret)
 
 available_cores <- parallel::detectCores(logical = T)
 n_cores <- if (is.na(available_cores) || available_cores < 2) 1L else available_cores - 1L
@@ -28,14 +27,11 @@ theme_custom <- function() {
 
 
 # 1. Import & prepare data -----------------------------------------------------
-genanc <- readRDS('all_stats.rds')
+genanc <- readRDS('supervised_output.rds')$s4
 pheno <- readRDS('all_pheno.rds')
-
 s4 <- genanc %>%
-  filter(admixture=='s4') %>% 
-  select(aid, matches('X[1-4]_b')) %>%
-  rename_with(function(x) x = str_remove(x,'_b'), matches('X[1-4]_b')) %>%
-  left_join(pheno)
+  mutate(FID = as.character(FID)) %>%
+  inner_join(readRDS('pheno.rds'))
 
 # get the national means and SDs for standardization purpose (using the full phenotypic sample)
 td <- svydesign(data = pheno %>% drop_na(wt4, clusterid4, strataid4, attract4),
@@ -550,7 +546,8 @@ my_attract_plot_data <- function(data, nhw_focalX, race_grp, discrete) {
     group_modify(~{
       n <- round(nrow(.x)/100)
       breaks <- quantile(.x$focalX, probs = seq(0,1,length.out=n+1))
-      .x$bin <- cut(.x$focalX, breaks = breaks, labels = 1:n)
+      breaks <- unique(breaks)
+      .x$bin <- cut(.x$focalX, breaks = breaks, labels = 1:(length(breaks)-1))
       .x$bin <- ifelse(is.na(.x$bin),1,.x$bin)
       return(.x)
     }) %>%
@@ -971,7 +968,8 @@ my_feglm <- function(data, y, covariates, slope_vars = c('X1','X4'),
                      slope_newdata = NULL, slope_by = 'best_race', race_interaction = T) {
   d <- my_fe_dataprep(data, y, covariates)
   exp <- my_fe_exp(y, covariates, race_interaction)
-  reg <- feglm(exp, cluster = ~aid, family = binomial, data = d, data.save = T)
+  reg <- feglm(exp, cluster = ~aid, family = binomial, data = d, data.save = T,
+               glm.iter = 50)
   reg$call$fml <- exp
   reg$call$data <- d
   reg$nmdata <- d

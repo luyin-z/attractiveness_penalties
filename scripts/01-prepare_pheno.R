@@ -12,9 +12,8 @@ ah$w1 <- read_xpt('allwave1.xpt') %>% rename_all(tolower)
 for (i in 2:5) {
   ah[[paste0('w',i)]] <- read_xpt(paste0('wave', i, '.xpt')) %>% rename_all(tolower)
 }
-ah$wt3 <- read_xpt('weights3.xpt') %>% rename_all(tolower)
 ah$wt4 <- read_xpt('weights4.xpt') %>% rename_all(tolower)
-ah$int4 <- read_xpt('INTID4.xpt') %>% rename_all(tolower)
+ah$int4 <- read_xpt('intid4.xpt') %>% rename_all(tolower)
 ah$ses <- read_xpt('conses.xpt') %>% rename_all(tolower)
 
 
