@@ -1018,7 +1018,7 @@ for (i in seq_along(cov_list)) {
     mutate(p.value = 2*(1-pnorm(abs(estimate/std.error))))
 }
 
-reg_outcome <- c('Continuous Attractiveness','Very attractive')
+reg_outcome <- c('Attractiveness Score','Pr ("Very Attractive")')
 
 rows <- c('Basic Controls', rep('X',4),
           'Racial Classification Controls', rep(' ',1), rep('X',3),
@@ -1044,38 +1044,71 @@ my_coef_map <- function(var_names, include_x3 = F) {
     str_replace_all(':', ' x ')
 }
 
-my_main_table <- function(mlist, label, crows, AME = F, include_x3 = F, ame_by_race = T) {
+my_main_table <- function(mlist, label, crows, AME = F, include_x3 = F, 
+                          ame_by_race = T, race_keep = c('NHB', 'Hispanic'),
+                          ancestry_keep = NULL, subgroup_ns = F) {
+  if (!is.null(ancestry_keep)) {
+    ancestry_keep <- as.character(ancestry_keep)
+  }
+  
   trows <- lapply(mlist, function(m) {
-    d <- data.frame(V1 = c('Num.Inds','Num.Age','Num.Inter x Waves'), 
-               V2 = c(m$fe_nid, m$fixef_sizes['agey'], m$fixef_sizes['wave^intid'])) %>%
-      rbind(
-        m$nmdata %>%
-          group_by(best_race) %>%
-          summarise(V2 = mean(.data[[m$fml[[2]]]])) %>%
-          ungroup %>%
-          filter(best_race %in% c('NHW','NHB','Hispanic')) %>%
-          transmute(V1 = paste0('Mean outcome: ', best_race), V2 = sprintf('%.3f', V2))
+    if (subgroup_ns) {
+      nd <- m$nmdata %>% filter(best_race %in% race_keep)
+      d <- data.frame(
+        V1 = c('N Observations in Subgroup',
+               'N Individuals in Subgroup',
+               'N Interviewers'),
+        V2 = format(c(nrow(nd), n_distinct(nd$aid), n_distinct(nd$intid)),
+                    big.mark = ',', scientific = F)
       )
-    if (!is.null(m$pseudo_r2)) {
-      d <- d %>%
-        rbind(data.frame(V1 = 'Pseudo R2', V2 = sprintf('%.3f', m$pseudo_r2)))
+    } else {
+      d <- data.frame(V1 = c('Num.Inds','Num.Age','Num.Inter x Waves'), 
+                      V2 = c(m$fe_nid, m$fixef_sizes['agey'], m$fixef_sizes['wave^intid'])) %>%
+        rbind(
+          m$nmdata %>%
+            group_by(best_race) %>%
+            summarise(V2 = mean(.data[[m$fml[[2]]]])) %>%
+            ungroup %>%
+            filter(best_race %in% c('NHW','NHB','Hispanic')) %>%
+            transmute(V1 = paste0('Mean outcome: ', best_race), V2 = sprintf('%.3f', V2))
+        )
+      if (!is.null(m$pseudo_r2)) {
+        d <- d %>%
+          rbind(data.frame(V1 = 'Pseudo R2', V2 = sprintf('%.3f', m$pseudo_r2)))
+      }
     }
     return(d)
   }) %>%
     do.call(cbind, .) %>%
     select(`m1.V1`, ends_with('V2'))
   names(trows) <- names(crows)
+  
   rows <- rbind(crows, trows)
   names(rows) <- c('term', paste0('m',1:length(mlist)))
   rows <- rows %>%
     mutate(part = 'manual', statistic = '')
   
-  vars <- lapply(mlist, function(r) {
+  raw_vars <- vars <- lapply(mlist, function(r) {
     names(coef(r))
   }) %>%
     unlist() %>%
-    unique() %>%
-    my_coef_map(include_x3 = include_x3)
+    unique()
+  
+  if (!is.null(ancestry_keep) & !AME) {
+    kept_vars <- raw_vars[
+      grepl(paste0('best_race(', paste(race_keep, collapse = '|'), ')'), raw_vars) &
+        grepl(paste0('(^|:)', paste(ancestry_keep, collapse = '|'), '(:|$)'), raw_vars)
+    ]
+    vars <- setNames(
+      c(X1 = '*P*^AFR^ (10 pp)', X3 = '*P*^EAS^ (10 pp)', X4 = '*P*^IAM^ (10 pp)')[
+        str_extract(kept_vars, 'X[134]')
+      ],
+      kept_vars
+    )
+  } else {
+    vars <- raw_vars %>%
+      my_coef_map(include_x3 = include_x3)
+  }
   
   coef_omit <- if (include_x3) {
     'NHB$|Hispanic$|NHW|AINA|AAPI|female|ses|irace|skin|hair|eye'
@@ -1085,7 +1118,10 @@ my_main_table <- function(mlist, label, crows, AME = F, include_x3 = F, ame_by_r
   
   if (AME & mlist[[1]]$fml[[2]]!='attract') {
     tblmlist <- lapply(mlist, function(m) {
-      if (ame_by_race) {
+      if (!is.null(ancestry_keep)) {
+        m$bme %>%
+          filter(best_race %in% race_keep, term %in% ancestry_keep)
+      } else if (ame_by_race) {
         m$bme %>%
           filter(best_race %in% c('NHB','Hispanic')) %>%
           mutate(term = paste0(best_race, term))
@@ -1093,21 +1129,33 @@ my_main_table <- function(mlist, label, crows, AME = F, include_x3 = F, ame_by_r
         m$bme
       }
     })
-    rows <- rows %>%
-      rbind(lapply(mlist, function(m) m$nobs) %>%
-              bind_rows() %>%
-              mutate(term = 'Num.Obs.', part = 'manual', statistic = ''))
+    
+    if (!is.null(ancestry_keep)) {
+      vars <- c(X1 = '*P*^AFR^ (10 pp)', X3 = '*P*^EAS^ (10 pp)', X4 = '*P*^IAM^ (10 pp)')[ancestry_keep]
+    } else if (!subgroup_ns) {
+      rows <- rows %>%
+        rbind(lapply(mlist, function(m) m$nobs) %>%
+                bind_rows() %>%
+                mutate(term = 'Num.Obs.', part = 'manual', statistic = ''))
+    }
   } else {
     tblmlist <- mlist
   }
   
-  tbl <- modelsummary(tblmlist,
-                      estimate = '{estimate}{stars}',
-                      coef_omit = coef_omit,
-                      coef_rename = vars, 
-                      add_rows = rows,
-                      gof_omit = 'IC|Std.Errors|FE|RMSE|Adj',
-                      output = 'data.frame') %>%
+  ms_args <- list(models = tblmlist,
+                  estimate = '{estimate}{stars}',
+                  add_rows = rows,
+                  gof_omit = 'IC|Std.Errors|FE|RMSE|Adj|R|Num',
+                  output = 'data.frame')
+  
+  if (!is.null(ancestry_keep)) {
+    ms_args$coef_map <- vars
+  } else {
+    ms_args$coef_omit <- coef_omit
+    ms_args$coef_rename <- vars
+  }
+  
+  tbl <- do.call(modelsummary, ms_args) %>%
     mutate(across(paste0('m',1:length(mlist)), 
                   ~ case_when(grepl('e',.) & statistic=='estimate' ~ 
                                 paste0(sprintf('%.3f', parse_number(.)), gsub('.*[0-9]','',.)),
@@ -1134,13 +1182,16 @@ my_main_table <- function(mlist, label, crows, AME = F, include_x3 = F, ame_by_r
   return(tbl)
 }
 
-my_combine_tbl <- function(tbl_list, add_var_hline = T) {
+my_combine_tbl <- function(tbl_list, num_vars = NULL, add_var_hline = T) {
   num_models <- tbl_list[[1]]$body$dataset %>%
     select(matches('^m[0-9]+')) %>%
     length()
-  num_vars <- tbl_list[[1]]$body$dataset %>%
-    filter(grepl('(NHB|Hispanic) ', term)) %>%
-    nrow()
+  
+  if (is.null(num_vars)) {
+    num_vars <- tbl_list[[1]]$body$dataset %>%
+      filter(grepl('(NHB|Hispanic) ', term)) %>%
+      nrow()
+  }
   
   tbl <- tbl_list[[1]]$body$dataset %>%
     rename_with(~ paste0('attract_',.), matches('^m[0-9]+')) %>%
@@ -1165,13 +1216,26 @@ my_combine_tbl <- function(tbl_list, add_var_hline = T) {
     colformat_md() %>%
     autofit()
 }
-  
-wtbl <- my_combine_tbl(
-  list(my_main_table(reg$attract, reg_outcome[[1]], rows, F),
-       my_main_table(reg$attract2, reg_outcome[[2]], rows, T))
-)
 
-save_as_html(wtbl, path = 'tables/table1.html')
+# Table 1: NHB respondents
+table1 <- my_combine_tbl(
+  list(my_main_table(reg$attract, reg_outcome[[1]], rows, F, race_keep = 'NHB',
+                     ancestry_keep = 'X1', subgroup_ns = T),
+       my_main_table(reg$attract2, reg_outcome[[2]], rows, T, race_keep = 'NHB',
+                     ancestry_keep = 'X1', subgroup_ns = T)),
+  num_vars = 1
+)
+save_as_html(table1, path = 'tables/table1.html')
+
+# supplementary table: Hispanic respondents
+main_hispanic <- my_combine_tbl(
+  list(my_main_table(reg$attract, reg_outcome[[1]], rows, F, race_keep = 'Hispanic',
+                     ancestry_keep = c('X1','X4'), subgroup_ns = T),
+       my_main_table(reg$attract2, reg_outcome[[2]], rows, T, race_keep = 'Hispanic',
+                     ancestry_keep = c('X1','X4'), subgroup_ns = T)),
+  num_vars = 2
+)
+save_as_html(main_hispanic, path = 'tables/appendix_attract_gsp_hispanic.html')
 
 
 # 3.2 Interaction/decomposition analyses
