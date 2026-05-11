@@ -1448,7 +1448,7 @@ my_int_table <- function(mlist, subtitle_list, intvarname_list, yvar, reg_label)
                    colwidths = c(1,length(subtitle_list[[reg_label]])/2,
                                  length(subtitle_list[[reg_label]])/2)) %>%
     add_header_row(values = c('', ifelse(yvar=='attract',
-                                         'Attractiveness Rating (Continuous)',
+                                         'Attractiveness Score',
                                          'Pr("Very Attractive")')), 
                    colwidths = c(1,length(subtitle_list[[reg_label]]))) %>%
     align(align = 'center', part = 'header') %>%

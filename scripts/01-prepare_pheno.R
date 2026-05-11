@@ -205,7 +205,7 @@ ppheno <- ah$w4 %>%
     )
   ) %>%
   # merge in W1 constructed SES variables
-  full_join(ah$ses %>% transmute(aid, nhood_ses = nhood1_d, fam_ses = sespc_al)) %>%
+  full_join(ah$ses %>% transmute(aid = as.character(aid), nhood_ses = nhood1_d, fam_ses = sespc_al)) %>%
   select(aid, sex, byear, bmonth, paste0('age',1:4), edu, matches('race'),
          matches('_black'), skin, hair, eye, attract1 = h1ir1, attract2 = h2ir1, 
          attract3 = h3ir1, attract4 = h4ir1, wt4, lwt4, clusterid4, strataid4, 
