@@ -6,7 +6,9 @@ Title: Leveraging Genomic Data to Document Within-Race Attractiveness Penalties 
 
 Journal: Sociological Science
 
-Authors: Taddess, Zhang, and Trejo (Equal first authorship)
+Authors: Taddess, Zhang, and Trejo
+
+*Note, Taddess & Zhang are co-first authors and Trejo is the corresponding author
 
 Date: May 2026
 
