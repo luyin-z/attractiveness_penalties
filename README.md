@@ -8,7 +8,7 @@ Journal: Sociological Science
 
 Authors: Taddess, Zhang, and Trejo
 
-*Note, Taddess & Zhang are co-first authors and Trejo is the corresponding author
+*Note, Taddess and Zhang are co-first authors and Trejo is the corresponding author
 
 Date: May 2026
 
